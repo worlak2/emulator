@@ -2,8 +2,7 @@
 from flask import Flask, request, jsonify
 import requests
 import sys
-import os
-import socket
+
 
 print("1. Обновить конфигурацию. \n2. Вернуть стандартную")
 work = str(input())
@@ -89,7 +88,7 @@ def handler():
             return 'ACCESS_ACTIVATION'
         elif (status == '8'):
             requests.get(
-                'https://smsoff.com/api/?api/?route=addBlacklist&apikey={0}&phone={1}'.format(apikey, id))
+                'http://sms-off.com/api/?route=addBlacklist&apikey={0}&phone={1}'.format(apikey, id[2:]))
             return 'ACCESS_CANCEL'
 
 
