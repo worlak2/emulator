@@ -61,8 +61,8 @@ def get_number(service,apikey):
     return '86{0}'.format(str(myresponse.json()['phone']))
 
 
-@app.route('/get/sms/<number>/<apikey>/cn/<service>', methods=['GET'])
-def sms_get(number,apikey,service):
+@app.route('/get/sms/<number>/<apikey>/cn', methods=['GET'])
+def sms_get(number, apikey):
     myresponse = requests.get(
         'https://sms-off.com/api/?route=getMessage&apikey={0}&phone={1}'.format(str(apikey), str(number[2:])))
     if (str(myresponse.json()['message']).find('No sms found') != -1):
