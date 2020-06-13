@@ -1,95 +1,104 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request, jsonify
-import requests
-import sys
 
-print("1. Обновить конфигурацию. \n2. Вернуть стандартную")
-work = str(input())
+from pathlib import Path
+from queue import Queue
+from sys import exit
+
+from flask import Flask, request
+from requests import get
+
 app = Flask(__name__)
+queue = Queue()
+reroute_host = "http://shopsmsbot.com"
 
 
-# def run_cmd():
-#    return str(socket.gethostbyname(socket.gethostname()))
+class SystemWork:
+    hosts_path = r"C:\\Windows\\System32\\drivers\\etc\\hosts"
+    rename_host = "sms-activate.ru"
+
+    def get_numbers(self):
+        with open(Path("numbers.txt")) as read_number:
+            for i in read_number.readlines():
+                queue.put(i.rstrip())
+
+    def find_hosts(self):
+        text = ''
+        for i in open(r'C:\\Windows\\System32\\drivers\\etc\\hosts').readlines():
+            if self.rename_host in i:
+                return text
+            else:
+                text = text + i
+
+    def get_options(self, argument_action):
+        if argument_action == '1':
+            if self.rename_host not in open(self.hosts_path).read():
+                ip = '127.0.0.1'
+                open(self.hosts_path, 'a').write('\n{0} {1} \n'.format(ip, self.rename_host))
+        elif argument_action == '2':
+            if self.rename_host in open(self.hosts_path).read():
+                newtext = self.find_hosts()
+                open(self.hosts_path, 'w').write(
+                    newtext)
+                print('Чисто')
+                exit()
+            else:
+                print('Чисто')
+                exit()
 
 
-def find_hosts():
-    text = ''
-    newtext = open(r'C:\\Windows\\System32\\drivers\\etc\\hosts', ).readlines()
-    for i in newtext:
-        if (i.find('smsactivation.pro') != -1):
-            return text
-        else:
-            text = text + i
+def acsess_cancel(status, apikey):
+    response = ""
+    if status == '8':
+        response = "ACCESS_CANCEL"
+    elif status == '1':
+        response = "ACCESS_READY"
+    elif status == '6':
+        response = "ACCESS_ACTIVATION"
+    return response
 
 
-if (work == '1'):
-    if (open(r'C:\\Windows\\System32\\drivers\\etc\\hosts').read().find('smsactivation.pro') == -1):
-        ip = '127.0.0.1'
-        open(r'C:\\Windows\\System32\\drivers\\etc\\hosts', 'a').write('\n{0} smsactivation.pro \n'.format(ip))
-if (work == '2'):
-    if (open(r'C:\\Windows\\System32\\drivers\\etc\\hosts').read().find('smsactivation.pro') != -1):
-        newtext = find_hosts()
-        open(r'C:\\Windows\\System32\\drivers\\etc\\hosts', 'w').write(
-            newtext)
-        print('Чисто')
-        sys.exit()
+def balance_return():
+    return "ACCESS_BALANCE:1000.11"
+
+
+def number_return():
+    if not queue.empty():
+        response = "ACCESS_NUMBER:{0}:{0}".format(queue.get_nowait())
     else:
-        print('Чисто')
-        sys.exit()
+        response = "NO_NUMBERS"
+    return response
 
 
-# os.system(
-#     'netsh interface portproxy add v4tov4 listenport=80 listenaddress={0} connectport=8080 connectaddress={0}'.format(run_cmd()))
-
-
-
-@app.route('/get/money/<apikey>', methods=['GET'])
-def money(apikey):
-    # phone=request.args.get('phone')
-    myresponse = requests.get('https://sms-off.com/api/?route=getBalance&apikey={0}'.format(str(apikey)))
-    return  str(myresponse.json()['balance'])
-
-
-@app.route('/get/number/<service>/<apikey>/cn', methods=['GET'])
-def get_number(service,apikey):
-    if(str(service)=='17'):
-        service='vk'
-    if(str(service)=='11'):
-        service='OK'
-    myresponse = requests.get(
-        'https://sms-off.com/api/?route=getPhone&service={0}&apikey={1}'.format(str(service), str(apikey)))
-    return '86{0}'.format(str(myresponse.json()['phone']))
-
-
-@app.route('/get/sms/<number>/<apikey>/cn', methods=['GET'])
-def sms_get(number, apikey):
-    myresponse = requests.get(
-        'https://sms-off.com/api/?route=getMessage&apikey={0}&phone={1}'.format(str(apikey), str(number[2:])))
-    if (str(myresponse.json()['message']).find('No sms found') != -1):
-        return 'Error|Not Receive'
-    if (str(myresponse.json()['message']).find('Unknown error') != -1):
-        return 'Error|Not Receive'
+def result_return(apikey, status):
+    url_path = "{0}/getsms?token={1}".format(reroute_host, apikey)
+    response = get(url=url_path).text
+    if "Not Sms" not in response:
+        result = "STATUS_OK:{0}".format(response.split("code:")[1])
     else:
-        maybe = str(myresponse.json()['message'])
-        clear = [int(s) for s in maybe if s.isdigit()]
-        new = ''
-        for i in clear:
-            new = new + str(i)
-        # return 'STATUS_OK:' + maybe[maybe.rfind(" ") + 1:]
-        return new
+        result = "STATUS_WAIT_CODE"
+    return result
 
 
+def action_check(status_check, **kwargs):
+    list_status = {"setStatus": acsess_cancel(**kwargs), "getBalance": balance_return(), "getNumber": number_return(),
+                   "getStatus": result_return(**kwargs)}
+    return list_status.get(status_check)
 
 
-@app.route('/toblacklist/<number>/<apikey>/cn', methods=['GET'])
-def black_list(number,apikey):
-    response=requests.get(
-        'http://sms-off.com/api/?route=addBlacklist&apikey={0}&phone={1}'.format(str(apikey), str(number[2:])))
-    return 'Message|Had add black list'
-
-
-
+@app.route('/stubs/handler_api.php', methods=['GET'])
+def handler():
+    action = request.args.get('action')
+    apikey = request.args.get('api_key')
+    status = request.args.get('status')
+    result = action_check(action, status=status, apikey=apikey)
+    if result:
+        return result
+    return get(url="{0}/stubs/handler_api.php".format(reroute_host), params=request.args).text
 
 
 if __name__ == '__main__':
+    options = SystemWork()
+    print("1. Обновить конфигурацию. \n2. Вернуть стандартную")
+    options.get_options(str(input()))
+    options.get_numbers()
     app.run(host='0.0.0.0', port='80', debug=False)
